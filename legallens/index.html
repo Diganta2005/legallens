@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LegalLens</title>
+<style>
+:root{
+  --bg:#0b0d12; --panel:#12151c; --line:#232838; --text:#e8ebf3; --muted:#8b93a7;
+  --accent1:#ec4899; --accent2:#38bdf8;
+}
+@media (prefers-color-scheme: light){
+  :root{ --bg:#f6f7fb; --panel:#ffffff; --line:#e3e6ee; --text:#151823; --muted:#5b6274; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:24px 16px 40px}
+header{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent1),var(--accent2));flex:none}
+h1{font-size:1.3rem;margin:0}
+.sub{color:var(--muted);font-size:.88rem;margin:0 0 18px}
+textarea{width:100%;min-height:160px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:.92rem;resize:vertical;font-family:inherit}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-size:.85rem;cursor:pointer}
+button.primary{background:linear-gradient(135deg,var(--accent1),var(--accent2));color:#fff;border:none;font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+.qa-input{display:flex;gap:8px;margin-top:10px}
+.qa-input input{flex:1;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+.out{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-top:14px;white-space:pre-wrap;font-size:.9rem;line-height:1.55;overflow-x:auto}
+.out.empty{color:var(--muted);font-style:italic}
+.disclaimer{color:var(--muted);font-size:.75rem;margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--muted);border-top-color:var(--accent2);border-radius:50%;animation:sp .7s linear infinite;margin-right:6px;vertical-align:-1px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="logo"></div><h1>LegalLens</h1></header>
+  <p class="sub">Paste a contract, agreement, or policy below. Get plain-language explanations, risk flags, and next steps — not a substitute for a lawyer.</p>
+
+  <textarea id="doc" placeholder="Paste the legal text here..."></textarea>
+  <div class="row">
+    <button class="primary" data-action="simplify">Simplify document</button>
+    <button data-action="risks">Highlight risks & obligations</button>
+    <button data-action="checklist">Generate checklist</button>
+    <button data-action="prep">Prep questions for a lawyer</button>
+  </div>
+
+  <div class="qa-input">
+    <input id="q" placeholder="Ask a question about this document...">
+    <button data-action="ask" id="askBtn">Ask</button>
+  </div>
+
+  <div id="out" class="out empty">Results will appear here.</div>
+
+  <div class="disclaimer">LegalLens provides general information to help you understand documents — it does not provide legal advice and does not replace a licensed attorney.</div>
+</div>
+
+<script>
+const outEl = document.getElementById('out');
+const docEl = document.getElementById('doc');
+const buttons = document.querySelectorAll('button[data-action]');
+
+function setOut(text, loading){
+  outEl.classList.toggle('empty', !text && !loading);
+  outEl.innerHTML = loading ? '<span class="spin"></span>Thinking...' : (text || 'Results will appear here.');
+}
+function setBusy(busy){ buttons.forEach(b => b.disabled = busy); }
+
+const prompts = {
+  simplify: (doc) => `You are a legal-literacy assistant. Rewrite the following document in plain, simple language a non-lawyer can understand. Preserve all substantive meaning and important terms; do not omit obligations. Use short paragraphs or bullet points.\n\nDocument:\n${doc}`,
+  risks: (doc) => `You are a legal-literacy assistant. Analyze the following document and list: 1) Key obligations for each party, 2) Potential risks or red flags, 3) Any unusual, one-sided, or inconsistent clauses. Use clear headers and bullet points. Do not give legal advice, only informational analysis.\n\nDocument:\n${doc}`,
+  checklist: (doc) => `You are a legal-literacy assistant. Based on the following document, produce: 1) A short plain-language summary (3-5 sentences), 2) An action checklist of things the reader should do or verify before signing/agreeing.\n\nDocument:\n${doc}`,
+  prep: (doc) => `You are a legal-literacy assistant. Based on the following document, generate a list of specific, well-informed questions the reader should ask a licensed lawyer before proceeding. Group questions by topic.\n\nDocument:\n${doc}`
+};
+
+async function runAction(action, extra){
+  const doc = docEl.value.trim();
+  if(!doc){ setOut('Paste a document first.'); return; }
+  setBusy(true);
+  setOut('', true);
+  try{
+    let prompt;
+    if(action === 'ask'){
+      prompt = `You are a legal-literacy assistant. Answer the user's question using ONLY the document below. If the answer isn't in the document, say so clearly. Do not give legal advice, only informational explanation.\n\nDocument:\n${doc}\n\nQuestion: ${extra}`;
+    } else {
+      prompt = prompts[action](doc);
+    }
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Request failed');
+    setOut(data.text);
+  } catch(e){
+    setOut('Something went wrong: ' + (e && e.message ? e.message : 'please try again.'));
+  } finally {
+    setBusy(false);
+  }
+}
+
+buttons.forEach(b => {
+  if(b.id === 'askBtn') return;
+  b.addEventListener('click', () => runAction(b.dataset.action));
+});
+document.getElementById('askBtn').addEventListener('click', () => {
+  const q = document.getElementById('q').value.trim();
+  if(!q){ setOut('Type a question first.'); return; }
+  runAction('ask', q);
+});
+document.getElementById('q').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter') document.getElementById('askBtn').click();
+});
+</script>
+</body>
+</html>

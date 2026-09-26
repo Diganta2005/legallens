@@ -1,0 +1,12 @@
+{
+  "name": "legallens",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GenAI legal-literacy assistant (PromptWars: AI for Legal Assistance & Access)",
+  "scripts": {
+    "test": "node --test **/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -25,10 +25,13 @@ exposed to the browser.
 
 ```
 legallens/
-├── index.html            # static frontend
+├── index.html                    # static markup
+├── app.js                         # frontend logic (separated for cacheability & clarity)
 ├── api/
-│   ├── analyze.js         # Vercel serverless function (calls Anthropic API server-side)
-│   └── analyze.test.js     # unit tests for input validation
+│   ├── analyze.js                 # Vercel serverless function (calls Anthropic API server-side)
+│   └── analyze.test.js            # unit + handler-level tests
+├── .github/workflows/test.yml    # CI: runs tests + lint on every push/PR
+├── .eslintrc.json
 ├── package.json
 └── .gitignore
 ```
@@ -58,12 +61,18 @@ legallens/
 
 ## Testing
 
-Unit tests cover the request-validation logic (empty input, oversized input,
-non-string input, boundary cases) using Node's built-in test runner — no extra
-dependencies required.
+- **Unit tests** cover input validation (empty, oversized, non-string, boundary cases).
+- **Integration-style tests** exercise the actual request handler with mocked
+  `req`/`res`/`fetch`: rejecting non-POST methods, rejecting invalid bodies,
+  a missing-API-key path, a successful upstream response, and an upstream
+  failure — checking in each case that no internal detail leaks into the error.
+- Uses Node's built-in test runner (`node:test`) — no test-framework dependency.
+- **Continuous integration**: `.github/workflows/test.yml` runs the full suite
+  (and lint) on every push and pull request, across Node 18 and 20.
 
 ```
 npm test
+npm run lint
 ```
 
 ## Deploy to GitHub + Vercel
